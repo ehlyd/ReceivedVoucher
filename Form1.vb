@@ -557,8 +557,7 @@ Public Class Form1
                 SendSuccessfulVoucherReceivedtoEmail()
                 SendMissingSKUtoEmail()
 
-            Else
-                WriteToFile("No record found.")
+
             End If
 
             mclsOra.CloseDB()
