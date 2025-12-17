@@ -417,7 +417,7 @@ Public Class Form1
 
         Catch ex As Exception
             WriteToFile(ex.Message)
-            SendEmail_AppError(ex.Message)
+            'SendEmail_AppError(ex.Message)
         Finally
             End
         End Try
@@ -506,7 +506,7 @@ Public Class Form1
             End If
 
             WriteToFile("Getting replenishment with ""ready for your review"" status and not yet received in Retail PRO...")
-            strQuery = "SELECT * FROM XXASH_SALASA_REPLE_HEADER WHERE NVL(RETAILPRO_RECEIVED,'N')='N' AND TRUNC(MODIFIED_DATE)>=TRUNC(SYSDATE) And STATUS ='ready for your review'
+            strQuery = "SELECT * FROM XXASH_SALASA_REPLE_HEADER WHERE NVL(RETAILPRO_RECEIVED,'N')='N' AND TRUNC(MODIFIED_DATE)>=TRUNC(SYSDATE-3) And STATUS ='ready for your review'
                         AND SBS_NO='" & currSBSNo & "' AND STORE_CODE='" & currStoreCode & "' ORDER BY REPLE_ID"
             dt = mclsOra.GetDataSet(strQuery).Tables(0)
             WriteToFile(dt.Rows.Count & " record(s) found.")
@@ -540,7 +540,7 @@ Public Class Form1
 
                     Else
 
-                        WriteToFile("Received qty was not processed due to missing SKU(s) for PO No.: " & dRow.Item("PO_NUM") & ", Box No.: " & dRow.Item("CONTAINER_NUM"))
+                        WriteToFile("Received qty was not processed due to missing SKU(s) for PO-ASN No.: " & dRow.Item("BL_NUM") & ", Box No.: " & dRow.Item("CONTAINER_NUM"))
 
                     End If
 
@@ -669,7 +669,7 @@ Public Class Form1
                 tblRepleRecv = CreateHTMLTable(dtSummary)
 
 
-                WriteToFile("Sending successful voucher receiving email to " & strEmailRecipient & " ...")
+                WriteToFile("Sending successful voucher receiving email to: " & strEmailReceivedVoucher & ", CC: " & strEmailReceivedVoucherCC & " ...")
                 SendEmail(strEmailReceivedVoucher, "Successful voucher receiving from Salasa Replenishment", strfileAttachment, tblRepleRecv, strEmailReceivedVoucherCC)
                 WriteToFile("Email sent.")
 
@@ -703,7 +703,7 @@ Public Class Form1
             Dim dt As DataTable
 
             WriteToFile("Checking missing SKU(s)...")
-            strQuery = "SELECT DISTINCT H.REPLE_ID, H.PO_NUM,H.CONTAINER_NUM, D.SKU,D.QTY_RECEIVED FROM XXASH_SALASA_REPLE_HEADER H INNER JOIN XXASH_SALASA_REPLE_DETAIL D
+            strQuery = "SELECT DISTINCT H.REPLE_ID, H.BL_NUM,H.CONTAINER_NUM, D.SKU,D.QTY_RECEIVED FROM XXASH_SALASA_REPLE_HEADER H INNER JOIN XXASH_SALASA_REPLE_DETAIL D
                         ON H.REPLE_ID=D.REPLE_HEADERID
                         LEFT OUTER JOIN RPS.INVN_SBS_ITEM I ON D.SKU=NVL(I.ALU,I.UPC)
                         WHERE H.VOU_SID='" & VoucherSID & "' AND I.SID IS NULL"
@@ -716,11 +716,11 @@ Public Class Form1
 
                 For Each dRow As DataRow In dt.Rows
 
-                    strQuery = "insert into _tmpMissingSKUs (REPLENISHMENT_ID,PO_NUM,CONTAINER_NUM,SKU) values(" & dRow.Item("REPLE_ID") & ",'" & dRow.Item("PO_NUM") & "','" _
+                    strQuery = "insert into _tmpMissingSKUs (REPLENISHMENT_ID,PO_NUM,CONTAINER_NUM,SKU) values(" & dRow.Item("REPLE_ID") & ",'" & dRow.Item("BL_NUM") & "','" _
                     & dRow.Item("CONTAINER_NUM") & "','" & dRow.Item("SKU") & "'," & dRow.Item("QTY_RECEIVED") & ")"
                     mclsSQL.ExecuteNonQuery(strQuery)
 
-                    WriteToFile("SKU " & dRow.Item("SKU") & " from Replenishment ID: " & dRow.Item("REPLE_ID") & " PO.No-ASN.No: " & dRow.Item("PO_NUM") & ", Box No: " & dRow.Item("CONTAINER_NUM") & " does not exists in Retail Pro.")
+                    WriteToFile("SKU " & dRow.Item("SKU") & " from Replenishment ID: " & dRow.Item("REPLE_ID") & ", PO-ASN No.: " & dRow.Item("BL_NUM") & ", Box No: " & dRow.Item("CONTAINER_NUM") & " does not exists in Retail Pro.")
                 Next
 
                 mclsSQL.CloseDB()
@@ -754,8 +754,8 @@ Public Class Form1
                 Dim strfileAttachment As String = System.Windows.Forms.Application.StartupPath & "\MISSING_SKU\MissingSKU_" & Format(Now, "yyyyMMddHHmmss") & ".xlsx"
                 ExportToExcel_EPPlus(dtMissingSKU, strfileAttachment)
 
-                WriteToFile("Sending missing SKUs email to: " & strEmailReceivedVoucher & ", CC: " & strEmailRecipient & " ...")
-                SendEmail(strEmailReceivedVoucher, "Undefined SKU from Salasa Replenishment", strfileAttachment, Nothing, strEmailRecipient)
+                WriteToFile("Sending missing SKUs email to: " & strEmailReceivedVoucher & ", CC: " & strEmailReceivedVoucher & " ...")
+                SendEmail(strEmailReceivedVoucher, "Undefined SKU from Salasa Replenishment", strfileAttachment, Nothing, strEmailReceivedVoucherCC)
                 WriteToFile("Email sent.")
             End If
 
