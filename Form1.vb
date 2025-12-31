@@ -256,6 +256,8 @@ Public Class Form1
                     For Each dRow As DataRow In dtVoucherItem.Rows
                         WriteToFile("Receiving Sku: " & dRow.Item("SKU") & ", Qty: " & dRow.Item("QTY_RECEIVED"))
                         mclsAPI.ReceiveVoucherItem(strVoucherSID, dRow.Item("VOU_ITEM_SID"), dRow.Item("VOU_ITEM_ROW_VERSION"), dRow.Item("UPC"), dRow.Item("QTY_RECEIVED"))
+
+                        System.Threading.Thread.Sleep(5000)
                     Next
 
                 Else
@@ -275,6 +277,8 @@ Public Class Form1
                 For Each dRow As DataRow In dtExtraItem.Rows
                     WriteToFile("Adding extra item: " & dRow.Item("UPC") & ", Qty: " & dRow.Item("QTY_RECEIVED"))
                     mclsAPI.AddExtraItem(strVoucherSID, dRow.Item("ITEM_SID"), dRow.Item("UPC"), dRow.Item("QTY_RECEIVED"), dRow.Item("STYLENO"), dRow.Item("PRICE"))
+
+                    System.Threading.Thread.Sleep(5000)
                 Next
 
             End If
@@ -287,13 +291,22 @@ Public Class Form1
 
                 intVoucherRowVersion = dtVoucherRowVersion.Rows(0).Item(0)
 
-                'mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, UpdatedAt)
-                mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, Now)
+                '----------mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, UpdatedAt)
+
+                If IsVoucherReceiveQtyWithVariance(strVoucherSID) Then
+                    WriteToFile("Voucher SID " & strVoucherSID & " has received qty with variance. Voucher is not approved.")
+                Else
+                    WriteToFile("Approving voucher...")
+                    mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, Now)
+
+                    System.Threading.Thread.Sleep(5000)
+                    WriteToFile("Voucher approved successfully.")
+                End If
+
 
                 mclsOra.ExecuteNonQuery("UPDATE XXASH_SALASA_REPLE_HEADER H SET H.RETAILPRO_RECEIVED='Y',H.MODIFIED_DATE=SYSDATE WHERE VOU_SID='" & strVoucherSID & "' AND H.RETAILPRO_RECEIVED<>'Y'")
 
             End If
-
 
             WriteToFile("Voucher receiving process completed.")
 
@@ -304,6 +317,39 @@ Public Class Form1
             Throw ex
         End Try
     End Sub
+
+    Private Function IsVoucherReceiveQtyWithVariance(vouSID As String) As Boolean
+        Try
+            Dim strquery As String
+            Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
+            Dim dt As DataTable
+            mclsOra.OpenDB()
+            strquery = "SELECT V.*,S.QTY_REQUEST,S.QTY_RECEIVED  FROM
+                        (SELECT V.ASN_NO, V.SID,I.ALU,I.UPC,VI.ITEM_SID,vi.price, SUM(VI.ORIG_QTY)ORIG_QTY,SUM(VI.QTY)QTY 
+                        FROM RPS.VOUCHER V INNER JOIN RPS.VOU_ITEM VI ON V.SID=VI.VOU_SID 
+                        LEFT OUTER JOIN RPS.INVN_SBS_ITEM I ON I.SID=VI.ITEM_SID 
+                        WHERE V.SID='" & vouSID & "'
+                        GROUP BY V.SID,I.ALU,I.UPC,VI.ITEM_SID,V.ASN_NO,vi.price)V
+                        INNER JOIN 
+                        (SELECT H.VOU_SID, SUBSTR(BL_NUM,-5)BL_NUM, SKU, SUM(QTY_REQUEST)QTY_REQUEST,SUM(D.QTY_RECEIVED)QTY_RECEIVED FROM XXASH_SALASA_REPLE_DETAIL D 
+                        INNER JOIN XXASH_SALASA_REPLE_HEADER H ON D.REPLE_HEADERID=H.REPLE_ID 
+                        WHERE H.VOU_SID ='" & vouSID & "'
+                        GROUP BY SKU,SUBSTR(BL_NUM,-5),H.VOU_SID)S 
+                        ON V.ALU=S.SKU 
+                        AND V.SID=S.VOU_SID 
+                        WHERE V.QTY<>S.QTY_RECEIVED 
+                        ORDER BY V.ASN_NO"
+            dt = mclsOra.GetDataSet(strquery).Tables(0)
+            If dt.Rows.Count > 0 Then
+                Return True
+            Else
+                Return False
+            End If
+            mclsOra.CloseDB()
+        Catch ex As Exception
+            Throw ex
+        End Try
+    End Function
 
     Private Sub ReceiveExtraItemManual(strVoucherSID As String)
         Dim dtExtraItem As DataTable
@@ -555,8 +601,9 @@ Public Class Form1
                 Next
 
                 SendSuccessfulVoucherReceivedtoEmail()
-                SendMissingSKUtoEmail()
 
+                SendMissingSKUtoEmail()
+                SendVoucherRcvQtyVariance()
 
             End If
 
@@ -762,6 +809,54 @@ Public Class Form1
             mclsSQL.ExecuteNonQuery("If OBJECT_ID('_tmpMissingSKUs', 'U') IS NOT NULL DROP TABLE _tmpMissingSKUs")
 
             mclsSQL.CloseDB()
+
+        Catch ex As Exception
+            If ex.Message.Contains("Invalid object name") Then
+            Else
+                Throw ex
+            End If
+        End Try
+    End Sub
+
+    Private Sub SendVoucherRcvQtyVariance()
+        Try
+            Dim dtVoucherRcvQtyVariance As DataTable
+            Dim strQuery As String
+            Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
+            mclsOra.OpenDB()
+
+            strQuery = "SELECT V.*,S.SALASA_QTY_RCVD  FROM
+                        (SELECT V.PO_NO,V.TRACKING_NO INVOICE_NO, V.ASN_NO,V.PKG_NO BOX_NUMBER, V.SID VOU_SID,I.ALU,I.UPC, SUM(VI.ORIG_QTY)VOU_ORIG_QTY,SUM(VI.QTY)VOU_QTY 
+                        FROM RPS.VOUCHER V INNER JOIN RPS.VOU_ITEM VI ON V.SID=VI.VOU_SID 
+                        LEFT OUTER JOIN RPS.INVN_SBS_ITEM I ON I.SID=VI.ITEM_SID 
+                        WHERE V.VOU_TYPE=0 AND V.STATUS=3
+                        GROUP BY V.SID,I.ALU,I.UPC,V.ASN_NO,V.PO_NO,V.PKG_NO,V.TRACKING_NO)V
+                        INNER JOIN 
+                        (SELECT H.VOU_SID, SUBSTR(BL_NUM,-5)BL_NUM, SKU, SUM(D.QTY_RECEIVED)SALASA_QTY_RCVD FROM XXASH_SALASA_REPLE_DETAIL D 
+                        INNER JOIN XXASH_SALASA_REPLE_HEADER H ON D.REPLE_HEADERID=H.REPLE_ID 
+                        GROUP BY SKU,SUBSTR(BL_NUM,-5),H.VOU_SID)S 
+                        ON V.ALU=S.SKU 
+                        AND V.VOU_SID=S.VOU_SID 
+                        WHERE V.VOU_QTY<>S.SALASA_QTY_RCVD 
+                        ORDER BY V.ASN_NO"
+
+            dtVoucherRcvQtyVariance = mclsOra.GetDataSet(strQuery).Tables(0)
+
+            If dtVoucherRcvQtyVariance.Rows.Count <> 0 Then
+
+                If Dir(System.Windows.Forms.Application.StartupPath & "\RCVD_QTY_VARIANCE", vbDirectory) = vbNullString Then
+                    MkDir(System.Windows.Forms.Application.StartupPath & "\RCVD_QTY_VARIANCE")
+                End If
+
+                Dim strfileAttachment As String = System.Windows.Forms.Application.StartupPath & "\RCVD_QTY_VARIANCE\RcvdQtyVariance_" & Format(Now, "yyyyMMddHHmmss") & ".xlsx"
+                ExportToExcel_EPPlus(dtVoucherRcvQtyVariance, strfileAttachment)
+
+                WriteToFile("Sending received qty variance email to: " & strEmailRecipient)
+                SendEmail(strEmailRecipient, "Jacadi Online qty received discrepancy", strfileAttachment)
+                WriteToFile("Email sent.")
+            End If
+
+            mclsOra.CloseDB()
 
         Catch ex As Exception
             If ex.Message.Contains("Invalid object name") Then

@@ -402,7 +402,8 @@ ReTry:      authNonce = GetAuthNonce()
                 response.Close()
 
             Catch webex As WebException
-                WriteToFile("Error generating voucher: " & webex.Message)
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error generating voucher: " & webex.Message & " " & responseStringErr)
                 Return False
             End Try
 
@@ -443,6 +444,9 @@ ReTry:      authNonce = GetAuthNonce()
             dataStream.Write(byteArray, 0, byteArray.Length)
             dataStream.Close()
 
+
+
+
             Try
 
                 Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
@@ -462,7 +466,10 @@ ReTry:      authNonce = GetAuthNonce()
                 response.Close()
 
             Catch webex As WebException
-                WriteToFile("Error receiving voucher item: " & webex.Message)
+
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error receiving voucher item: " & webex.Message & " " & responseStringErr)
+
             End Try
 
         Catch ex As Exception
@@ -535,7 +542,10 @@ ReTry:      authNonce = GetAuthNonce()
                 response.Close()
 
             Catch webex As WebException
-                WriteToFile("Error adding extra item: " & webex.Message)
+
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error adding extra item: " & webex.Message & " " & responseStringErr)
+
             End Try
 
         Catch ex As Exception
@@ -604,7 +614,8 @@ ReTry:      authNonce = GetAuthNonce()
                 response.Close()
 
             Catch webex As WebException
-                WriteToFile("Error approving voucher: " & webex.Message)
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error approving voucher: " & webex.Message & " " & responseStringErr)
             End Try
 
         Catch ex As Exception
@@ -665,7 +676,8 @@ ReTry:      authNonce = GetAuthNonce()
                 response.Close()
 
             Catch webex As WebException
-                WriteToFile("Error updating PO Note: " & webex.Message)
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error updating PO Note: " & webex.Message & " " & responseStringErr)
             End Try
 
         Catch ex As Exception
@@ -724,7 +736,8 @@ ReTry:      authNonce = GetAuthNonce()
                 response.Close()
 
             Catch webex As WebException
-                WriteToFile("Error adding comments to voucher: " & webex.Message)
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error adding comments to voucher: " & webex.Message & " " & responseStringErr)
             End Try
 
         Catch ex As Exception

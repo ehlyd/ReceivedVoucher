@@ -195,6 +195,10 @@ Module Module1
                 msgBody = "Below is the list of successful voucher receiving from Salasa Replenishment" & tblHTML.ToString()
                 'msgBody = msgBody & strHtmlLineFeed.ToString & "Details are also available in the attached file." & tblHTML.ToString()
 
+            ElseIf subject.Contains("discrepancy") Then
+
+                msgBody = "Attached is the list of ASN with qty received different compared to Salasa."
+
             Else
 
                 msgBody = "Attached is a list of replenishments with SKUs not in the system."
