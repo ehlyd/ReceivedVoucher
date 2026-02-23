@@ -20,7 +20,7 @@ Module Module1
     Public strEmailReceivedVoucher, strEmailReceivedVoucherCC As String
     Public objStream As StreamWriter
 
-    Public currWokstation, currStoreSid, currStoreCode, currSBSNo, strDBStoreCode, strUseDBStoreCode As String
+    Public currWokstation, currStoreSid, currStoreCode, currSBSNo, strDBStoreCode, strUseDBStoreCode, strBrand As String
     Public authSession As String
 
     Sub Main()
@@ -34,11 +34,12 @@ Module Module1
             strUserID = .Settings("SQLUserID").Value
             strPswrd = .Settings("SQLPswrd").Value
             currWokstation = .Settings("Workstation").Value
+            strBrand = .Settings("Brand").Value
         End With
 
         Dim mclsSQL As New clsSQLDB, dt As DataTable
         mclsSQL.OpenDB()
-        dt = mclsSQL.GetDataSet("select * from BrandIntegration_Settings where upper(IntegrationName)='RECEIVED VOUCHER BY PRISM API' and upper(BRAND)='JACADI'").Tables(0)
+        dt = mclsSQL.GetDataSet("select * from BrandIntegration_Settings where upper(IntegrationName)='RECEIVED VOUCHER BY PRISM API' and upper(BRAND)='" & strBrand & "'").Tables(0)
         If dt.Rows.Count <> 0 Then
             Dim setValue As String
 
@@ -197,11 +198,11 @@ Module Module1
 
             ElseIf subject.Contains("discrepancy") Then
 
-                msgBody = "Attached is the list of ASN with qty received different compared to Salasa."
+                msgBody = "Attached is the list of ASN where qty received is different compared to Salasa."
 
             Else
 
-                msgBody = "Attached is a list of replenishments with SKUs not in the system."
+                msgBody = "Attached is the list of replenishments with SKUs not in Retail PRO."
 
             End If
 
@@ -229,7 +230,7 @@ Module Module1
         smtpClient.Credentials = New NetworkCredential(strEmailSender, strEmailPswrd)
         smtpClient.EnableSsl = True
 
-        subject = "Error in Prism API Voucher Receiving"
+        subject = "Error in Retail PRO API Voucher Receiving for " & strBrand & " brand, store code: " & currStoreCode
 
         'strEmailRecipient = "idabu@aseelah.com"
 

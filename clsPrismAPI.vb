@@ -333,8 +333,8 @@ ReTry:      authNonce = GetAuthNonce()
 
                 For Each dataObject In responseObject
                     currStoreSid = Replace(dataObject("storesid").ToString, """", "")
-                    currStoreCode = dataObject("storecode").ToString
-                    currSBSNo = dataObject("subsidiarynumber").ToString
+                    currStoreCode = Replace(dataObject("storecode").ToString, """", "")
+                    currSBSNo = Replace(dataObject("subsidiarynumber").ToString, """", "")
                 Next
 
                 WriteToFile("Current store SID was changed successfully.")
@@ -605,7 +605,7 @@ ReTry:      authNonce = GetAuthNonce()
                     responseString = ReadResponseStream(response)
                     Dim responseObject As Object = JsonConvert.DeserializeObject(responseString)
 
-                    WriteToFile("Voucher approved.")
+                    WriteToFile("Voucher approved successfully.")
 
                 Else
                     WriteToFile("Error approving voucher: " & response.StatusCode & " " & response.StatusDescription)
@@ -667,7 +667,7 @@ ReTry:      authNonce = GetAuthNonce()
                     responseString = ReadResponseStream(response)
                     Dim responseObject As Object = JsonConvert.DeserializeObject(responseString)
 
-                    WriteToFile("PO note updated to ""C"".")
+                    WriteToFile("PO note updated to ""C"" successfully.")
 
                 Else
                     WriteToFile("Error updating PO note: " & response.StatusCode & " " & response.StatusDescription)
