@@ -101,7 +101,7 @@ Public Class Form1
             Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
 
-            strQuery = "Select V.*,NVL(S.QTY_RECEIVED,0)QTY_RECEIVED,S.UPDATED_AT FROM 
+            strQuery = "Select V.*,NVL(S.QTY_RECEIVED,0)QTY_RECEIVED,TO_CHAR(S.UPDATED_AT,'YYYY-MM-DD HH24:MI:SS')UPDATED_AT,S.REPLE_ID FROM 
                         (SELECT V.SID,V.ROW_VERSION VOUCHER_ROW_VERSION, V.MODIFIED_DATETIME,V.POST_DATE,V.STATUS,V.HELD, V.VOU_TYPE,V.VOU_CLASS,
                         V.PO_NO,V.PKG_NO,V.ASN_NO, V.VOU_NO,VI.SID VOU_ITEM_SID,VI.ROW_VERSION VOU_ITEM_ROW_VERSION,NVL(I.ALU,I.UPC) SKU,I.UPC UPC,VI.ORIG_QTY,VI.QTY,
                         SB.SBS_NO,ST.STORE_CODE 
@@ -109,7 +109,7 @@ Public Class Form1
                         INNER JOIN RPS.INVN_SBS_ITEM I ON I.SID=VI.ITEM_SID 
                         INNER JOIN RPS.STORE ST ON ST.SID=V.STORE_SID 
                         INNER JOIN RPS.SUBSIDIARY SB ON SB.SID=ST.SBS_SID 
-                        WHERE V.SID='" & VoucherSID & "')V
+                        WHERE V.SID='" & VoucherSID & "' AND I.ACTIVE=1)V
                         LEFT OUTER JOIN 
                         (SELECT H.*,D.* FROM XXASH_SALASA_REPLE_HEADER H INNER JOIN XXASH_SALASA_REPLE_DETAIL D
                         ON H.REPLE_ID=D.REPLE_HEADERID)S ON V.SID=S.VOU_SID                        
@@ -137,7 +137,7 @@ Public Class Form1
 
             Dim intVoucherRowVersion As Integer = 0
             Dim dtVoucherRowVersion As DataTable
-            'Dim UpdatedAt As DateTime
+            Dim UpdatedAt As String, repleID As String
 
             Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
@@ -155,7 +155,8 @@ Public Class Form1
             If Not IsNothing(dtVoucherItem) Then
                 If dtVoucherItem.Rows.Count <> 0 Then
 
-                    'UpdatedAt = dtVoucherItem.Rows(0).Item("UPDATED_AT")
+                    UpdatedAt = dtVoucherItem.Rows(0).Item("UPDATED_AT")
+                    repleID = dtVoucherItem.Rows(0).Item("REPLE_ID")
 
                     For Each dRow As DataRow In dtVoucherItem.Rows
                         WriteToFile("Receiving Sku: " & dRow.Item("SKU") & ", UPC: " & dRow.Item("UPC") & ", Qty: " & dRow.Item("QTY_RECEIVED"))
@@ -164,49 +165,54 @@ Public Class Form1
                         System.Threading.Thread.Sleep(5000)
                     Next
 
-                Else
+                    '    Else
 
+                    '        WriteToFile("No matching voucher item found to receive for Voucher SID: " & strVoucherSID)
+
+                    '    End If
+
+                    'End If
+
+                    Dim dtExtraItem As DataTable
+                    dtExtraItem = GetExtraItems(strVoucherSID)
+                    If dtExtraItem.Rows.Count <> 0 Then
+
+                        For Each dRow As DataRow In dtExtraItem.Rows
+                            WriteToFile("Adding extra item: " & dRow.Item("UPC") & ", Qty: " & dRow.Item("QTY_RECEIVED"))
+                            mclsAPI.AddExtraItem(strVoucherSID, dRow.Item("ITEM_SID"), dRow.Item("UPC"), dRow.Item("QTY_RECEIVED"), dRow.Item("STYLENO"), dRow.Item("PRICE"))
+
+                            System.Threading.Thread.Sleep(5000)
+                        Next
+
+                    End If
+
+                    dtVoucherRowVersion = mclsOra.GetDataSet("SELECT ROW_VERSION FROM RPS.VOUCHER WHERE SID='" & strVoucherSID & "' AND STATUS=3").Tables(0)
+                    If dtVoucherRowVersion.Rows.Count > 0 Then
+
+                        dt = mclsOra.GetDataSet("SELECT SID FROM RPS.EMPLOYEE WHERE upper(USER_NAME)='PRISM_CUSTOM'").Tables(0)
+                        If dt.Rows.Count <> 0 Then strEmpSID = dt.Rows(0).Item(0)
+
+                        intVoucherRowVersion = dtVoucherRowVersion.Rows(0).Item(0)
+
+                        If IsVoucherReceiveQtyWithVariance(strVoucherSID) Then
+                            WriteToFile("Voucher SID " & strVoucherSID & " has received qty with variance. Voucher is not approved.")
+                        Else
+                            WriteToFile("Approving voucher...")
+                            mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, Now, UpdatedAt, repleID)
+
+                            System.Threading.Thread.Sleep(5000)
+                        End If
+
+                        mclsOra.ExecuteNonQuery("UPDATE XXASH_SALASA_REPLE_HEADER H SET H.RETAILPRO_RECEIVED='Y',H.MODIFIED_DATE=SYSDATE WHERE VOU_SID='" & strVoucherSID & "' AND H.RETAILPRO_RECEIVED<>'Y'")
+
+                    End If
+                    WriteToFile("Voucher receiving process completed.")
+
+                Else
                     WriteToFile("No matching voucher item found to receive for Voucher SID: " & strVoucherSID)
-
                 End If
 
             End If
-
-            Dim dtExtraItem As DataTable
-            dtExtraItem = GetExtraItems(strVoucherSID)
-            If dtExtraItem.Rows.Count <> 0 Then
-
-                For Each dRow As DataRow In dtExtraItem.Rows
-                    WriteToFile("Adding extra item: " & dRow.Item("UPC") & ", Qty: " & dRow.Item("QTY_RECEIVED"))
-                    mclsAPI.AddExtraItem(strVoucherSID, dRow.Item("ITEM_SID"), dRow.Item("UPC"), dRow.Item("QTY_RECEIVED"), dRow.Item("STYLENO"), dRow.Item("PRICE"))
-
-                    System.Threading.Thread.Sleep(5000)
-                Next
-
-            End If
-
-            dtVoucherRowVersion = mclsOra.GetDataSet("SELECT ROW_VERSION FROM RPS.VOUCHER WHERE SID='" & strVoucherSID & "' AND STATUS=3").Tables(0)
-            If dtVoucherRowVersion.Rows.Count > 0 Then
-
-                dt = mclsOra.GetDataSet("SELECT SID FROM RPS.EMPLOYEE WHERE upper(USER_NAME)='PRISM_CUSTOM'").Tables(0)
-                If dt.Rows.Count <> 0 Then strEmpSID = dt.Rows(0).Item(0)
-
-                intVoucherRowVersion = dtVoucherRowVersion.Rows(0).Item(0)
-
-                If IsVoucherReceiveQtyWithVariance(strVoucherSID) Then
-                    WriteToFile("Voucher SID " & strVoucherSID & " has received qty with variance. Voucher is not approved.")
-                Else
-                    WriteToFile("Approving voucher...")
-                    mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, Now)
-
-                    System.Threading.Thread.Sleep(5000)
-                End If
-
-                mclsOra.ExecuteNonQuery("UPDATE XXASH_SALASA_REPLE_HEADER H SET H.RETAILPRO_RECEIVED='Y',H.MODIFIED_DATE=SYSDATE WHERE VOU_SID='" & strVoucherSID & "' AND H.RETAILPRO_RECEIVED<>'Y'")
-
-            End If
-
-            WriteToFile("Voucher receiving process completed.")
 
             mclsOra.CloseDB()
 
@@ -284,13 +290,13 @@ Public Class Form1
                         INNER JOIN RPS.INVN_SBS_PRICE PL ON PL.INVN_SBS_ITEM_SID=I.SID
                         INNER JOIN RPS.PRICE_LEVEL p ON P.SID=PL.PRICE_LVL_SID
                         INNER JOIN RPS.SUBSIDIARY s ON S.SID=I.SBS_SID
-                        AND P.PRICE_LVL=1)P ON P.SKU=D.SKU
+                        AND P.PRICE_LVL=1 AND I.ACTIVE=1)P ON P.SKU=D.SKU
                         WHERE EXISTS(
                         SELECT V.* FROM RPS.VOUCHER V INNER JOIN RPS.SUBSIDIARY SB ON SB.SID=V.SBS_SID 
                         INNER JOIN RPS.STORE ST ON ST.SID=V.STORE_SID 
                         INNER JOIN RPS.VOU_ITEM VI ON VI.VOU_SID=V.SID
                         INNER JOIN RPS.INVN_SBS_ITEM I ON I.SID=VI.ITEM_SID 
-                        WHERE V.SID='" & VoucherSID & "'
+                        WHERE V.SID='" & VoucherSID & "' AND I.ACTIVE=1
                         AND H.VOU_SID=V.SID
                         AND H.SBS_NO=SB.SBS_NO AND H.STORE_CODE=ST.STORE_CODE)
                         AND NOT EXISTS
@@ -298,7 +304,7 @@ Public Class Form1
                         INNER JOIN RPS.STORE ST ON ST.SID=V.STORE_SID 
                         INNER JOIN RPS.VOU_ITEM VI ON VI.VOU_SID=V.SID
                         INNER JOIN RPS.INVN_SBS_ITEM I ON I.SID=VI.ITEM_SID 
-                        WHERE V.SID='" & VoucherSID & "'
+                        WHERE V.SID='" & VoucherSID & "' AND I.ACTIVE=1
                         AND H.VOU_SID=V.SID
                         AND H.SBS_NO=SB.SBS_NO AND H.STORE_CODE=ST.STORE_CODE
                         AND D.SKU=NVL(I.ALU,I.UPC))"
@@ -399,7 +405,6 @@ Public Class Form1
             WriteToFile(dt.Rows.Count & " record(s) found.")
 
             If dt.Rows.Count <> 0 Then
-
 
                 For Each dRow As DataRow In dt.Rows
 
@@ -756,7 +761,7 @@ Public Class Form1
                     If dtVoucherRowVersion.Rows.Count > 0 Then
                         intVoucherRowVersion = dtVoucherRowVersion.Rows(0).Item(0)
 
-                        mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, Now)
+                        mclsAPI.ApproveVoucher(strVoucherSID, strEmpSID, intVoucherRowVersion, Now, "", "")
 
                     End If
 

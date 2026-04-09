@@ -553,7 +553,7 @@ ReTry:      authNonce = GetAuthNonce()
         End Try
     End Sub
 
-    Public Sub ApproveVoucher(VoucherSID As String, EmpSID As String, rowVersion As Integer, ApproveDate As DateTime)
+    Public Sub ApproveVoucher(VoucherSID As String, EmpSID As String, rowVersion As Integer, ApproveDate As DateTime, UpdateAt As String, RepleID As String)
         Try
 
             Dim customFormat As String = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'"
@@ -571,7 +571,9 @@ ReTry:      authNonce = GetAuthNonce()
                                         ""approvbysid"":""" & EmpSID & """,
                                         ""approvdate"":""" & strApprovedDate & """,
                                         ""approvstatus"":2,
-                                        ""publishstatus"":2
+                                        ""publishstatus"":2,
+                                        ""custom6"":""" & RepleID & """,
+                                        ""custom7"":""" & UpdateAt & """,
                                         }
                                     ]
                                 }"
