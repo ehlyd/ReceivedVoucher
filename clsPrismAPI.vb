@@ -572,11 +572,13 @@ ReTry:      authNonce = GetAuthNonce()
                                         ""approvdate"":""" & strApprovedDate & """,
                                         ""approvstatus"":2,
                                         ""publishstatus"":2,
-                                        ""custom6"":""" & RepleID & """,
-                                        ""custom7"":""" & UpdateAt & """,
+                                        ""note"":""RepleID:" & RepleID & " | " & UpdateAt & """
                                         }
                                     ]
                                 }"
+
+            '""custom6"":""" & RepleID & """,
+            '""custom7"":""" & UpdateAt & """
 
             Dim url As String = APIUrl & "/api/backoffice/receiving/" & VoucherSID
 
@@ -744,6 +746,34 @@ ReTry:      authNonce = GetAuthNonce()
 
         Catch ex As Exception
             Throw
+        End Try
+    End Sub
+
+    Public Sub Logout()
+        Dim url As String = APIUrl & "/api/security/logout?ws=" & currWokstation
+
+        Try
+
+            WriteToFile("Logging out Prism API current session...")
+            Dim request As HttpWebRequest = WebRequest.Create(url)
+            request.Headers.Add("Auth-Session", authSession)
+            request.Method = "POST"
+
+            request.ServicePoint.ConnectionLimit = 10
+            request.ServicePoint.MaxIdleTime = 5 * 1000
+            request.Timeout = 60000
+
+            Dim response As HttpWebResponse = request.GetResponse()
+
+            If response.StatusCode <> HttpStatusCode.OK Then
+                WriteToFile("Error on logging-out. " & response.StatusCode & " " & response.StatusDescription)
+            End If
+
+            response.Close()
+
+            WriteToFile("Session logged out.")
+        Catch ex As Exception
+            Throw ex
         End Try
     End Sub
 

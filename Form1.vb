@@ -4,6 +4,7 @@ Imports System.Text
 
 Public Class Form1
 
+    Dim mclsAPI As clsPrismAPI
     Private Function GenerateASNVoucher(VoucherSID) As Boolean
         Try
 
@@ -35,8 +36,8 @@ Public Class Form1
 
                     mclsOra.CloseDB()
 
-                    Dim mclsAPI As New clsPrismAPI
                     If authSession = "" Then
+                        mclsAPI = New clsPrismAPI
                         If Not mclsAPI.IsAPI_LoginSuccessfull Then
                             WriteToFile("API Login failed.")
                             Exit Function
@@ -141,9 +142,9 @@ Public Class Form1
 
             Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
-            Dim mclsAPI As New clsPrismAPI
 
             If authSession = "" Then
+                mclsAPI = New clsPrismAPI
                 If Not mclsAPI.IsAPI_LoginSuccessfull Then
                     WriteToFile("API Login failed.")
                     Exit Sub
@@ -259,7 +260,7 @@ Public Class Form1
         dtExtraItem = GetExtraItems(strVoucherSID)
         If dtExtraItem.Rows.Count <> 0 Then
 
-            Dim mclsAPI As New clsPrismAPI
+            mclsAPI = New clsPrismAPI
             If mclsAPI.IsAPI_LoginSuccessfull = False Then
                 WriteToFile("API Login failed.")
                 Exit Sub
@@ -334,6 +335,7 @@ Public Class Form1
             WriteToFile(ex.Message)
             SendEmail_AppError(ex.Message)
         Finally
+            If authSession <> "" Then mclsAPI.Logout()
             End
         End Try
     End Sub
@@ -352,8 +354,8 @@ Public Class Form1
                 strSBSID = dt.Rows(0).Item("sbs_sid")
                 strStoreSID = dt.Rows(0).Item("sid")
 
-                Dim mclsAPI As New clsPrismAPI
                 If authSession = "" Then
+                    mclsAPI = New clsPrismAPI
                     If Not mclsAPI.IsAPI_LoginSuccessfull Then
                         WriteToFile("API Login failed.")
                         Exit Function
@@ -379,32 +381,32 @@ Public Class Form1
 
             Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
+            Dim dtSbsNo As DataTable
 
-            Dim mclsAPI As New clsPrismAPI
-            If authSession = "" Then
-                If Not mclsAPI.IsAPI_LoginSuccessfull Then
-
-                    WriteToFile("API Login failed.")
-                    Exit Sub
-
-                Else
-
-                    If currStoreCode <> strDBStoreCode Then
-                        If UCase(strUseDBStoreCode) = "Y" Then
-                            If ChangeCurrentStoreSID() = False Then Exit Sub
-                        End If
-                    End If
-
-                End If
-            End If
+            dtSbsNo = mclsOra.GetDataSet("select sbs_no from rps.subsidiary where sid in (select sbs_sid from rps.store where store_code='" & strDBStoreCode & "')").Tables(0)
+            If dtSbsNo.Rows.Count <> 0 Then currSBSNo = dtSbsNo.Rows(0).Item("sbs_no").ToString
 
             WriteToFile("Getting replenishment with ""ready for your review"" status and not yet received in Retail PRO...")
             strQuery = "SELECT * FROM XXASH_SALASA_REPLE_HEADER WHERE NVL(RETAILPRO_RECEIVED,'N')='N' AND TRUNC(MODIFIED_DATE)>=TRUNC(SYSDATE-15) And STATUS ='ready for your review'
-                        AND SBS_NO='" & currSBSNo & "' AND STORE_CODE='" & currStoreCode & "' ORDER BY REPLE_ID"
+                        And SBS_NO='" & currSBSNo & "' AND STORE_CODE='" & strDBStoreCode & "' ORDER BY REPLE_ID"
             dt = mclsOra.GetDataSet(strQuery).Tables(0)
             WriteToFile(dt.Rows.Count & " record(s) found.")
 
             If dt.Rows.Count <> 0 Then
+
+                mclsAPI = New clsPrismAPI
+                If authSession = "" Then
+                    If Not mclsAPI.IsAPI_LoginSuccessfull Then
+                        WriteToFile("API Login failed.")
+                        Exit Sub
+                    Else
+                        If currStoreCode <> strDBStoreCode Then
+                            If UCase(strUseDBStoreCode) = "Y" Then
+                                If ChangeCurrentStoreSID() = False Then Exit Sub
+                            End If
+                        End If
+                    End If
+                End If
 
                 For Each dRow As DataRow In dt.Rows
 
@@ -420,9 +422,7 @@ Public Class Form1
                         End If
 
                     Else
-
                         WriteToFile("Received qty was not processed due to missing SKU(s) for PO-ASN No.: " & dRow.Item("BL_NUM") & ", Box No.: " & dRow.Item("CONTAINER_NUM"))
-
                     End If
 
                 Next
@@ -462,8 +462,7 @@ Public Class Form1
     Private Sub ManualUpdatePOtoC()
         Try
 
-
-            Dim mclsAPI As New clsPrismAPI
+            mclsAPI = New clsPrismAPI
             If Not mclsAPI.IsAPI_LoginSuccessfull Then
 
                 WriteToFile("API Login failed.")
@@ -516,9 +515,8 @@ Public Class Form1
                     strPOSID = dt.Rows(0).Item("SID")
                     intPORowVersion = dt.Rows(0).Item("ROW_VERSION")
 
-                    Dim mclsAPI As New clsPrismAPI
-
                     If authSession = "" Then
+                        mclsAPI = New clsPrismAPI
                         If Not mclsAPI.IsAPI_LoginSuccessfull Then
                             WriteToFile("API Login failed.")
                             Exit Sub
@@ -740,7 +738,7 @@ Public Class Form1
             Dim strEmpSID As String = ""
 
             Dim intVoucherRowVersion As Integer = 0
-            Dim mclsAPI As New clsPrismAPI
+            mclsAPI = New clsPrismAPI
             Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
 
