@@ -358,7 +358,7 @@ ReTry:      authNonce = GetAuthNonce()
 
             Dim json As String = "{""data"":[{""clerksid"":""" & EmpSID & """,""asnsidlist"":""" & VoucherSID & """,""doupdatevoucher"":false,""originapplication"":""RProPrismWeb""}]}"
 
-            Console.WriteLine(json)
+            'Console.WriteLine(json)
 
             Dim url As String = APIUrl & "/api/backoffice/receiving?action=convertasntovoucher"
 
@@ -405,6 +405,71 @@ ReTry:      authNonce = GetAuthNonce()
                 Dim responseStringErr = ReadResponseStream(webex.Response)
                 WriteToFile("Error generating voucher: " & webex.Message & " " & responseStringErr)
                 Return False
+            End Try
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Function
+
+    Public Function PublishStatus(VoucherSID As String, rowVersion As Integer) As Boolean
+        Try
+
+
+            Dim json As String = "{
+                                    ""data"": [
+                                        {
+                                            ""rowversion"": " & rowVersion & ",
+                                            ""publishstatus"": 1
+                                        }
+                                    ]
+                                }"
+
+            '""custom6"":""" & RepleID & """,
+            '""custom7"":""" & UpdateAt & """
+
+            Dim url As String = APIUrl & "/api/backoffice/receiving/" & VoucherSID
+
+            Dim request As HttpWebRequest = WebRequest.Create(url)
+            request.Method = "PUT"
+            request.ContentType = "application/json"
+            request.Accept = "application/json, text/plain, version=2"
+            request.Headers.Add("Auth-Session", authSession)
+
+            request.ServicePoint.ConnectionLimit = 10
+            request.ServicePoint.MaxIdleTime = 5 * 1000
+            request.Timeout = 60000
+
+            Dim byteArray As Byte() = Encoding.UTF8.GetBytes(json)
+            request.ContentLength = byteArray.Length
+
+            Dim dataStream As Stream = request.GetRequestStream()
+            dataStream.Write(byteArray, 0, byteArray.Length)
+            dataStream.Close()
+
+            Try
+                WriteToFile("Updating publish status to 1...")
+                Dim response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)
+                Dim responseString As String = ""
+
+                If response.StatusCode = HttpStatusCode.OK Then
+
+                    responseString = ReadResponseStream(response)
+                    Dim responseObject As Object = JsonConvert.DeserializeObject(responseString)
+
+                    WriteToFile("Publish status updated successfully.")
+
+                    Return True
+
+                Else
+                    WriteToFile("Error updating publish status: " & response.StatusCode & " " & response.StatusDescription)
+                End If
+
+                response.Close()
+
+            Catch webex As WebException
+                Dim responseStringErr = ReadResponseStream(webex.Response)
+                WriteToFile("Error updating publish status: " & webex.Message & " " & responseStringErr)
             End Try
 
         Catch ex As Exception

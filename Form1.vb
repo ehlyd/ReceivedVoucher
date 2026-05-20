@@ -5,16 +5,14 @@ Imports System.Text
 Public Class Form1
 
     Dim mclsAPI As clsPrismAPI
-    Private Function GenerateASNVoucher(VoucherSID) As Boolean
+    Private Function GenerateASNVoucher(VoucherSID As String) As Boolean
+        Dim strEmpSID As String = ""
+        Dim strQuery As String
+        Dim dt As DataTable
+        Dim dtVoucherRowVersion As DataTable
+        Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
+
         Try
-
-            Dim strEmpSID As String = ""
-
-            Dim strQuery As String
-
-            Dim dt As DataTable
-
-            Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
 
             strQuery = "SELECT V.SID,V.PO_NO,SL.SLIP_NO FROM RPS.VOUCHER V INNER JOIN RPS.STORE ST ON ST.SID=V.STORE_SID LEFT OUTER JOIN RPS.SLIP SL ON SL.VOU_SID=V.SID " _
@@ -34,8 +32,6 @@ Public Class Form1
                 If dt.Rows.Count <> 0 Then
                     strEmpSID = dt.Rows(0).Item(0)
 
-                    mclsOra.CloseDB()
-
                     If authSession = "" Then
                         mclsAPI = New clsPrismAPI
                         If Not mclsAPI.IsAPI_LoginSuccessfull Then
@@ -47,9 +43,27 @@ Public Class Form1
 
                     If mclsAPI.IsGenerateVoucher_Successfull(strEmpSID, VoucherSID) Then
 
-                        Return True
+                        '==================== modified 20260518 ========
+                        strQuery = "SELECT ROW_VERSION FROM RPS.VOUCHER WHERE SID='" & VoucherSID & "' AND STATUS=3"
+                        dtVoucherRowVersion = mclsOra.GetDataSet(strQuery).Tables(0)
+
+                        If dtVoucherRowVersion.Rows.Count <> 0 Then
+
+                            Dim intRowVersion As Integer = dtVoucherRowVersion.Rows(0).Item(0)
+                            If mclsAPI.PublishStatus(VoucherSID, intRowVersion) = True Then
+                                Return True
+                            Else
+                                Return False
+                            End If
+
+                        End If
+                        '===============================================
+
+                        'Return True
 
                     End If
+
+                    'mclsOra.CloseDB()
 
                 Else
                     WriteToFile("PRISM_CUSTOM user not found.")
@@ -67,6 +81,8 @@ Public Class Form1
 
         Catch ex As Exception
             Throw ex
+        Finally
+            mclsOra.CloseDB()
         End Try
     End Function
 
@@ -156,7 +172,7 @@ Public Class Form1
             If Not IsNothing(dtVoucherItem) Then
                 If dtVoucherItem.Rows.Count <> 0 Then
 
-                    UpdatedAt = dtVoucherItem.Rows(0).Item("UPDATED_AT")
+                    UpdatedAt = IIf(IsDBNull(dtVoucherItem.Rows(0).Item("UPDATED_AT")), "", dtVoucherItem.Rows(0).Item("UPDATED_AT"))
                     repleID = dtVoucherItem.Rows(0).Item("REPLE_ID")
 
                     For Each dRow As DataRow In dtVoucherItem.Rows
@@ -165,14 +181,6 @@ Public Class Form1
 
                         System.Threading.Thread.Sleep(5000)
                     Next
-
-                    '    Else
-
-                    '        WriteToFile("No matching voucher item found to receive for Voucher SID: " & strVoucherSID)
-
-                    '    End If
-
-                    'End If
 
                     Dim dtExtraItem As DataTable
                     dtExtraItem = GetExtraItems(strVoucherSID)
@@ -374,12 +382,13 @@ Public Class Form1
     End Function
 
     Private Sub DailyVoucherReceiving()
+        mclsAPI = New clsPrismAPI
+        Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
         Try
 
             Dim strQuery As String, dt As DataTable, strVouPONo As String
             Dim VoucherSID As String = ""
 
-            Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
             Dim dtSbsNo As DataTable
 
@@ -394,7 +403,6 @@ Public Class Form1
 
             If dt.Rows.Count <> 0 Then
 
-                mclsAPI = New clsPrismAPI
                 If authSession = "" Then
                     If Not mclsAPI.IsAPI_LoginSuccessfull Then
                         WriteToFile("API Login failed.")
@@ -452,10 +460,10 @@ Public Class Form1
 
             End If
 
-            mclsOra.CloseDB()
-
         Catch ex As Exception
             Throw ex
+        Finally
+            mclsOra.CloseDB()
         End Try
     End Sub
 
@@ -771,6 +779,5 @@ Public Class Form1
             Throw ex
         End Try
     End Sub
-
 
 End Class
