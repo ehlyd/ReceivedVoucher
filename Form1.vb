@@ -595,56 +595,60 @@ Public Class Form1
     End Sub
 
     Private Function IsReplenishmentHaveMissingSKUs(VoucherSID As String) As Boolean
+        Dim mclsSQL As New clsSQLDB
+        Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
         Try
             Dim strQuery As String
 
-
-            Dim mclsSQL As New clsSQLDB
             mclsSQL.OpenDB()
             mclsSQL.ExecuteNonQuery("IF OBJECT_ID('_tmpMissingSKUs', 'U') IS NOT NULL DROP TABLE _tmpMissingSKUs")
-                strQuery = "CREATE TABLE [_tmpMissingSKUs]([REPLENISHMENT_ID] [int] NULL,[PO_NUM] [varchar](30) NULL,
+            strQuery = "CREATE TABLE [_tmpMissingSKUs]([REPLENISHMENT_ID] [int] NULL,[PO_NUM] [varchar](30) NULL,
 	                        [CONTAINER_NUM] [varchar](100) NULL,
 	                        [SKU] [varchar](30) NULL,[RCV_QTY] [INT] NULL
                         ) ON [PRIMARY]"
             mclsSQL.ExecuteNonQuery(strQuery)
 
-            Dim mclsOra As New clsOracleDB(strRPDataSource, strRPUserID, strRPPswrd)
             mclsOra.OpenDB()
             Dim dt As DataTable
 
             WriteToFile("Checking missing SKU(s)...")
             strQuery = "SELECT DISTINCT H.REPLE_ID, H.BL_NUM,H.CONTAINER_NUM, D.SKU,D.QTY_RECEIVED FROM XXASH_SALASA_REPLE_HEADER H INNER JOIN XXASH_SALASA_REPLE_DETAIL D
                         ON H.REPLE_ID=D.REPLE_HEADERID
-                        LEFT OUTER JOIN RPS.INVN_SBS_ITEM I ON D.SKU=NVL(I.ALU,I.UPC)
+                        LEFT OUTER JOIN RPS.INVN_SBS_ITEM I ON D.SKU=I.ALU
                         WHERE H.VOU_SID='" & VoucherSID & "' and H.SBS_NO='" & currSBSNo & "' AND H.STORE_CODE='" & currStoreCode & "'
                         AND I.SID IS NULL"
             dt = mclsOra.GetDataSet(strQuery).Tables(0)
             WriteToFile(dt.Rows.Count & " missing SKU(s) found.")
 
-            mclsOra.CloseDB()
-
             If dt.Rows.Count <> 0 Then
 
                 For Each dRow As DataRow In dt.Rows
 
-                    strQuery = "insert into _tmpMissingSKUs (REPLENISHMENT_ID,PO_NUM,CONTAINER_NUM,SKU) values(" & dRow.Item("REPLE_ID") & ",'" & dRow.Item("BL_NUM") & "','" _
+                    strQuery = "insert into _tmpMissingSKUs (REPLENISHMENT_ID,PO_NUM,CONTAINER_NUM,SKU,RCV_QTY) values(" & dRow.Item("REPLE_ID") & ",'" & dRow.Item("BL_NUM") & "','" _
                     & dRow.Item("CONTAINER_NUM") & "','" & dRow.Item("SKU") & "'," & dRow.Item("QTY_RECEIVED") & ")"
                     mclsSQL.ExecuteNonQuery(strQuery)
 
                     WriteToFile("SKU " & dRow.Item("SKU") & " from Replenishment ID: " & dRow.Item("REPLE_ID") & ", PO-ASN No.: " & dRow.Item("BL_NUM") & ", Box No: " & dRow.Item("CONTAINER_NUM") & " does not exists in Retail Pro.")
                 Next
 
-                mclsSQL.CloseDB()
+                strQuery = "INSERT INTO SALASA_MISSING_SKU (REPLENISHMENT_ID,PO_NUM,CONTAINER_NUM,SKU,RCV_QTY,INSERTED_DATE,EMAIL_SENT)
+                            SELECT *,GETDATE(),0 FROM _tmpMissingSKUs t WHERE not exists
+                            (select * from SALASA_MISSING_SKU s where s.REPLENISHMENT_ID=t.REPLENISHMENT_ID and s.SKU=t.SKU)"
+                mclsSQL.ExecuteNonQuery(strQuery)
+
+                mclsSQL.ExecuteNonQuery("DROP TABLE _tmpMissingSKUs")
 
                 Return True
 
             Else
-                mclsSQL.CloseDB()
                 Return False
             End If
 
         Catch ex As Exception
             Throw ex
+        Finally
+            mclsSQL.CloseDB()
+            mclsOra.CloseDB()
         End Try
     End Function
 
@@ -654,7 +658,7 @@ Public Class Form1
             Dim mclsSQL As New clsSQLDB
             mclsSQL.OpenDB()
 
-            dtMissingSKU = mclsSQL.GetDataSet("SELECT * FROM _tmpMissingSKUs").Tables(0)
+            dtMissingSKU = mclsSQL.GetDataSet("SELECT * fROM SALASA_MISSING_SKU WHERE CONVERT(DATE,INSERTED_DATE)=CONVERT(DATE,GETDATE()) AND EMAIL_SENT=0").Tables(0)
 
             If dtMissingSKU.Rows.Count <> 0 Then
 
@@ -668,9 +672,11 @@ Public Class Form1
                 WriteToFile("Sending missing SKUs email to: " & strEmailReceivedVoucher & ", CC: " & strEmailReceivedVoucher & " ...")
                 SendEmail(strEmailReceivedVoucher, "Missing " & strBrand & " SKU in Retail PRO.", strfileAttachment, Nothing, strEmailReceivedVoucherCC)
                 WriteToFile("Email sent.")
+
+                mclsSQL.ExecuteNonQuery("UPDATE SALASA_MISSING_SKU SET EMAIL_SENT=1 WHERE CONVERT(DATE,INSERTED_DATE)=CONVERT(DATE,GETDATE()) AND EMAIL_SENT=0")
             End If
 
-            mclsSQL.ExecuteNonQuery("If OBJECT_ID('_tmpMissingSKUs', 'U') IS NOT NULL DROP TABLE _tmpMissingSKUs")
+
 
             mclsSQL.CloseDB()
 
